@@ -4,12 +4,12 @@
 
 Manager::Manager() {
     camera.zoom = 3.0f;
-    camera.target = {Simulation::kWidth / 2.0f, Simulation::kHeight / 2.0f};
+    camera.target = {simulation.Width() / 2.0f, simulation.Height() / 2.0f};
     camera.offset = {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
 }
 
 void Manager::Update(float dt) {
-    handleInput();
+    handleInput(dt);
     smoothMovement(dt);
     simulation.Update(dt);
     updateEnergyDisplay(dt);
@@ -17,7 +17,7 @@ void Manager::Update(float dt) {
 
 void Manager::Draw2D() {
     BeginMode2D(camera);
-        render.DrawWorld(camera.zoom, showGrid);
+        render.DrawWorld(simulation, camera.zoom, showGrid);
         render.DrawAtoms(simulation);
     EndMode2D();
     render.DrawLabels(simulation, camera);
@@ -44,11 +44,18 @@ void Manager::DrawUI() {
     }
     DrawText(TextFormat("Sim time: %.1f", simulation.SimTime()), 50, 175, 20, RAYWHITE);
 
-    DrawText("Space: pause   +/- (or arrows): speed   R: x1   . : step (when paused)",
+    const float ws = simulation.WallSpeed();
+    DrawText(TextFormat("Field: %.0f x %.0f%s", simulation.Width(), simulation.Height(),
+                        ws < -0.5f ? "   compressing" : (ws > 0.5f ? "   expanding" : "")),
+             50, 200, 20, RAYWHITE);
+
+    DrawText("Space: pause   +/- (or arrows): speed   R: reset all   . : step (when paused)",
+             50, GetScreenHeight() - 55, 18, GRAY);
+    DrawText("Shift / Ctrl (hold): expand / compress field   Q / E (hold): place / remove at cursor",
              50, GetScreenHeight() - 30, 18, GRAY);
 }
 
-void Manager::handleInput() {
+void Manager::handleInput(float dt) {
     camera.offset = {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
 
     // Choose Atom
@@ -60,34 +67,45 @@ void Manager::handleInput() {
     if (IsKeyPressed(KEY_G)) showGrid = !showGrid;
 
     handleTimeInput();
+    handleFieldResize(dt);
 
     // LMB: Create Atom
-    if (
-        IsMouseButtonPressed(MOUSE_BUTTON_LEFT) ||
-        IsMouseButtonDown(MOUSE_BUTTON_LEFT) && IsKeyDown(KEY_LEFT_SHIFT)
-    ) {
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || placeHoldRepeater.Update(dt, IsKeyDown(KEY_Q))) {
         Vector2 world = GetScreenToWorld2D(GetMousePosition(), camera);
         simulation.AddAtom(world, selectedType);
     }
 
     // RMB: Remove Atom
-    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || removeHoldRepeater.Update(dt, IsKeyDown(KEY_E))) {
         Vector2 world = GetScreenToWorld2D(GetMousePosition(), camera);
         simulation.RemoveAtom(world);
     }
 
-    // MMB: Move Camera
+    // MMB: Drag atom and Throw
+    if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
+        Vector2 world = GetScreenToWorld2D(GetMousePosition(), camera);
+        draggingAtom = simulation.BeginGrab(world, 10.0f / camera.zoom);
+    }
     if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
-        Vector2 delta = GetMouseDelta();
-        camera.target.x -= delta.x / camera.zoom;
-        camera.target.y -= delta.y / camera.zoom;
+        if (draggingAtom) {
+            Vector2 world = GetScreenToWorld2D(GetMousePosition(), camera);
+            simulation.DragTo(world, dt);
+        } else {
+            Vector2 delta = GetMouseDelta();
+            camera.target.x -= delta.x / camera.zoom;
+            camera.target.y -= delta.y / camera.zoom;
+        }
+    }
+    if (IsMouseButtonReleased(MOUSE_BUTTON_MIDDLE)) {
+        if (draggingAtom) simulation.EndGrab();
+        draggingAtom = false;
     }
 
     // WHEEL: Zoom Camera
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f) {
         Vector2 before = GetScreenToWorld2D(GetMousePosition(), camera);
-        camera.zoom *= (wheel > 0) ? 1.1f : 1.0f / 1.1f;
+        camera.zoom *= (wheel > 0) ? 1.2f : 1.0f / 1.2f;
         if (camera.zoom < 0.1f) camera.zoom = 0.1f;
         if (camera.zoom > 70.0f) camera.zoom = 50.0f;
         Vector2 after = GetScreenToWorld2D(GetMousePosition(), camera);
@@ -127,7 +145,10 @@ void Manager::handleTimeInput() {
         simulation.SetTimeScale(simulation.TimeScale() * 2.0f);
     if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT) || IsKeyPressed(KEY_LEFT))
         simulation.SetTimeScale(simulation.TimeScale() * 0.5f);
-    if (IsKeyPressed(KEY_R)) simulation.SetTimeScale(1.0f);
+    if (IsKeyPressed(KEY_R)) {
+        simulation.Reset();
+        draggingAtom = false;
+    }
 
     if (simulation.IsPaused() &&
         (IsKeyPressed(KEY_PERIOD) || IsKeyPressedRepeat(KEY_PERIOD)))
@@ -148,4 +169,12 @@ void Manager::updateEnergyDisplay(float dt) {
         shownKE += (ke - shownKE) * a;
         shownPE += (pe - shownPE) * a;
     }
+}
+
+void Manager::handleFieldResize(float dt) {
+    const bool grow   = IsKeyDown(KEY_LEFT_SHIFT)   || IsKeyDown(KEY_RIGHT_SHIFT);
+    const bool shrink = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+
+    if (growRepeater.Update(dt, grow))     simulation.NudgeField(+kFieldStep);
+    if (shrinkRepeater.Update(dt, shrink)) simulation.NudgeField(-kFieldStep);
 }

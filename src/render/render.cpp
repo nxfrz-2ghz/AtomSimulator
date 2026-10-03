@@ -1,22 +1,22 @@
 #include "render.h"
 
-void Render::DrawWorld(float zoom, bool showGrid) const {
+void Render::DrawWorld(const Simulation& sim, float zoom, bool showGrid) const {
     // толщина делится на zoom, чтобы линии оставались ~1 px при любом масштабе
     const float thin = 1.0f / zoom;
 
     if (showGrid) {
         Color c = Fade(DARKGRAY, 0.6f);
-        for (int i = 1; i < Simulation::kCols; i++) {
+        for (int i = 1; i < sim.Cols(); i++) {
             float x = i * Simulation::kCellSize;
-            DrawLineEx({x, 0.0f}, {x, Simulation::kHeight}, thin, c);
+            DrawLineEx({x, 0.0f}, {x, sim.Height()}, thin, c);
         }
-        for (int j = 1; j < Simulation::kRows; j++) {
+        for (int j = 1; j < sim.Rows(); j++) {
             float y = j * Simulation::kCellSize;
-            DrawLineEx({0.0f, y}, {Simulation::kWidth, y}, thin, c);
+            DrawLineEx({0.0f, y}, {sim.Width(), y}, thin, c);
         }
     }
 
-    DrawRectangleLinesEx({0.0f, 0.0f, Simulation::kWidth, Simulation::kHeight},
+    DrawRectangleLinesEx({0.0f, 0.0f, sim.Width(), sim.Height()},
                          2.0f / zoom, GRAY);
 }
 
