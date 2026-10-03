@@ -1,0 +1,35 @@
+# --- Архивы ---
+*.zip
+
+# --- Сборка (CLion / CMake) ---
+cmake-build-*/
+build/
+out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+.cache/
+
+# --- Артефакты компиляции ---
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.dll.a
+
+# --- IDE ---
+.idea/
+.vscode/
+.vs/
+*.user
+*.suo
+
+# --- Прочее ---
+.DS_Store
+Thumbs.db
