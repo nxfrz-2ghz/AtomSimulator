@@ -15,9 +15,8 @@ public:
     static constexpr int   kMinCells     = 1;
     static constexpr int   kMaxCells     = 100;  // на ось; сетка трёхмерная, так что кубически дорого
 
-    static constexpr float kMaxWallSpeed  = 10.0f;
-    static constexpr float kWallSmoothing = 0.2f;
-    static constexpr float kMaxWallLead   = 60.0f;
+    static constexpr float kMaxWallSpeed = 10.0f;
+    static constexpr float kMaxWallLead  = 2.0f;
 
     float Width()  const { return size[X]; }   // X
     float Depth()  const { return size[Y]; }   // Y

@@ -28,25 +28,18 @@ void Field::Nudge(Axis axis, float deltaSize) {
 }
 
 void Field::Advance(float h) {
-    constexpr float kGain = 1.0f / (4.0f * kWallSmoothing);
-
     for (int a = 0; a < 3; ++a) {
         const float err = target[a] - size[a];
-        if (std::fabs(err) < 1e-3f && std::fabs(vel[a]) < 1e-3f) {
+        if (std::fabs(err) < 1e-3f) {
             size[a] = target[a];
             vel[a]  = 0.0f;
             continue;
         }
 
-        const float desired = std::clamp(err * kGain, -kMaxWallSpeed, kMaxWallSpeed);
-        vel[a] += (desired - vel[a]) * (1.0f - std::exp(-h / kWallSmoothing));
-
-        float next = size[a] + vel[a] * h;
-        if ((next - target[a]) * (size[a] - target[a]) < 0.0f) {   // страховка от перелёта
-            next = target[a];
-            vel[a] = 0.0f;
-        }
-        size[a] = next;
+        const float maxStep = kMaxWallSpeed * h;
+        const float step = std::clamp(err, -maxStep, maxStep);
+        size[a] += step;
+        vel[a]   = step / h;
     }
 }
 

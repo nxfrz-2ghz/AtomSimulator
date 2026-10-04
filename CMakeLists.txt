@@ -39,6 +39,10 @@ add_executable(AtomSimulator
     src/simulation/integrator.cpp
     src/simulation/simulation.cpp
     src/simulation/time_controller.cpp
+        src/manager/viewer2D.h
+        src/manager/viewer2D.cpp
+        src/manager/viewer3D.h
+        src/manager/viewer3D.cpp
 )
 
 target_link_libraries(AtomSimulator PRIVATE raylib)

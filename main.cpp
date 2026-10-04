@@ -14,7 +14,7 @@ int main() {
 
         BeginDrawing();
             ClearBackground(BLACK);
-            manager.Draw2D();
+            manager.Draw();
             manager.DrawUI();
             DrawFPS(50, 20);
         EndDrawing();
