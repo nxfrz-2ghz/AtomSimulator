@@ -5,12 +5,17 @@
 #include <cstddef>
 
 struct Atom {
-    Vector2 position;
-    Vector2 velocity;
+    Vector3 position;
+    Vector3 velocity;
     unsigned int type;
 
-    Vector2 force; // для накопления сил на каждом шаге
+    Vector3 force; // для накопления сил на каждом шаге
 };
+
+inline float DistanceSqr(const Vector3& a, const Vector3& b) {
+    const float dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+    return dx * dx + dy * dy + dz * dz;
+}
 
 struct AtomData {
     float mass;

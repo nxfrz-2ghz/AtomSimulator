@@ -1,26 +1,44 @@
 #include "manager.h"
 
+#include <algorithm>
 #include <cmath>
+#include <string>
+
+#include "../utils/projection.h"
+#include "../screen/screens/controls_screen.h"
+#include "../screen/screens/energy_graph_screen.h"
 
 Manager::Manager() {
     camera.zoom = 3.0f;
-    camera.target = {simulation.Width() / 2.0f, simulation.Height() / 2.0f};
+    // мировые координаты камеры: (x, -z), см. utils/projection.h
+    camera.target = {simulation.Width() / 2.0f, -simulation.Height() / 2.0f};
     camera.offset = {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f};
+
+    // Новый экран: класс от Screen + одна строка здесь
+    screens.Add<ControlsScreen>(KEY_ENTER, "Enter");
+    screens.Add<EnergyGraphScreen>(KEY_Z, "Z");
 }
 
 void Manager::Update(float dt) {
     handleInput(dt);
+    screens.HandleInput();
     smoothMovement(dt);
     simulation.Update(dt);
     updateEnergyDisplay(dt);
+    screens.Update(ScreenContext{simulation}, dt);
 }
 
 void Manager::Draw2D() {
     BeginMode2D(camera);
         render.DrawWorld(simulation, camera.zoom, showGrid);
-        render.DrawAtoms(simulation);
     EndMode2D();
-    render.DrawLabels(simulation, camera);
+
+    render.DrawAtoms(simulation, camera);
+
+    if (!draggingAtom) {
+        const Vector2 world = GetScreenToWorld2D(GetMousePosition(), camera);
+        render.DrawPlacementGhost(simulation, camera, world, placeY(), selectedType);
+    }
 }
 
 void Manager::DrawUI() {
@@ -33,7 +51,16 @@ void Manager::DrawUI() {
     DrawText(TextFormat("Energy per atom: %.4f   (kin %.4f, pot %.4f)",
                         shownKE + shownPE, shownKE, shownPE),
              50, 100, 20, RAYWHITE);
-    DrawText(TextFormat("Total Energy: %.3f", simulation.TotalEnergy()), 50, 125, 20, RAYWHITE);
+    const char* totalText = TextFormat("Total Energy: %.3f", simulation.TotalEnergy());
+    DrawText(totalText, 50, 125, 20, RAYWHITE);
+
+    // Текущее действие термостата - справа от энергии системы
+    if (thermoAction != ThermoAction::None) {
+        const bool cooling = thermoAction == ThermoAction::Cooling;
+        DrawText(cooling ? "<< Cooling (Q)" : "Heating (E) >>",
+                 50 + MeasureText(totalText, 20) + 20, 125, 20,
+                 cooling ? SKYBLUE : ORANGE);
+    }
 
     if (simulation.IsPaused()) {
         DrawText("PAUSED", 50, 150, 20, ORANGE);
@@ -44,15 +71,21 @@ void Manager::DrawUI() {
     }
     DrawText(TextFormat("Sim time: %.1f", simulation.SimTime()), 50, 175, 20, RAYWHITE);
 
-    const float ws = simulation.WallSpeed();
-    DrawText(TextFormat("Field: %.0f x %.0f%s", simulation.Width(), simulation.Height(),
-                        ws < -0.5f ? "   compressing" : (ws > 0.5f ? "   expanding" : "")),
+    DrawText(TextFormat("Field: X %.0f  Y %.0f  Z %.0f", simulation.Width(), simulation.Depth(), simulation.Height()),
              50, 200, 20, RAYWHITE);
 
-    DrawText("Space: pause   +/- (or arrows): speed   R: reset all   . : step (when paused)",
-             50, GetScreenHeight() - 55, 18, GRAY);
-    DrawText("Shift / Ctrl (hold): expand / compress field   Q / E (hold): place / remove at cursor",
-             50, GetScreenHeight() - 30, 18, GRAY);
+    std::string moving;
+    constexpr const char* kAxisNames[3] = {"X", "Y", "Z"};
+    for (int a = 0; a < 3; a++) {
+        const float v = simulation.WallSpeed(static_cast<Field::Axis>(a));
+        if (v < -0.5f)     moving += TextFormat(" %s-", kAxisNames[a]);
+        else if (v > 0.5f) moving += TextFormat(" %s+", kAxisNames[a]);
+    }
+    if (!moving.empty()) DrawText(("Walls:" + moving).c_str(), 50, 225, 20, GRAY);
+
+    DrawText(TextFormat("Place depth: %.0f%%  ([ far, ] near)", placeDepth * 100.0f), 50, 250, 20, RAYWHITE);
+
+    screens.Draw(ScreenContext{simulation});
 }
 
 void Manager::handleInput(float dt) {
@@ -70,13 +103,13 @@ void Manager::handleInput(float dt) {
     handleFieldResize(dt);
 
     // LMB: Create Atom
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || placeHoldRepeater.Update(dt, IsKeyDown(KEY_Q))) {
+    if (placeHoldRepeater.Update(dt, IsMouseButtonDown(MOUSE_BUTTON_LEFT))) {
         Vector2 world = GetScreenToWorld2D(GetMousePosition(), camera);
-        simulation.AddAtom(world, selectedType);
+        simulation.AddAtom(Projection::FromPlane(world, placeY()), selectedType);
     }
 
     // RMB: Remove Atom
-    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || removeHoldRepeater.Update(dt, IsKeyDown(KEY_E))) {
+    if (removeHoldRepeater.Update(dt, IsMouseButtonDown(MOUSE_BUTTON_RIGHT))) {
         Vector2 world = GetScreenToWorld2D(GetMousePosition(), camera);
         simulation.RemoveAtom(world);
     }
@@ -107,11 +140,35 @@ void Manager::handleInput(float dt) {
         Vector2 before = GetScreenToWorld2D(GetMousePosition(), camera);
         camera.zoom *= (wheel > 0) ? 1.2f : 1.0f / 1.2f;
         if (camera.zoom < 0.1f) camera.zoom = 0.1f;
-        if (camera.zoom > 70.0f) camera.zoom = 50.0f;
+        if (camera.zoom > 100.0f) camera.zoom = 100.0f;
         Vector2 after = GetScreenToWorld2D(GetMousePosition(), camera);
         camera.target.x += before.x - after.x;
         camera.target.y += before.y - after.y;
     }
+
+
+    handleThermostat(dt);
+
+    if (placeFartherRepeater.Update(dt, IsKeyDown(KEY_LEFT_BRACKET)))
+        placeDepth = std::max(placeDepth - kPlaceDepthStep, 0.02f);
+    if (placeNearerRepeater.Update(dt, IsKeyDown(KEY_RIGHT_BRACKET)))
+        placeDepth = std::min(placeDepth + kPlaceDepthStep, 0.98f);
+}
+
+void Manager::handleThermostat(float dt) {
+    const bool cool = IsKeyDown(KEY_Q);
+    const bool heat = IsKeyDown(KEY_E);
+
+    // Обе клавиши сразу - действия гасят друг друга
+    if (cool == heat || simulation.Atoms().empty()) {
+        thermoAction = ThermoAction::None;
+        return;
+    }
+
+    // Непрерывно, по реальному времени кадра: KE *= exp(+-rate * dt)
+    thermoAction = cool ? ThermoAction::Cooling : ThermoAction::Heating;
+    const float sign = cool ? -1.0f : 1.0f;
+    simulation.ScaleKineticEnergy(std::exp(sign * kThermostatRate * dt));
 }
 
 void Manager::smoothMovement(float dt) {
@@ -141,9 +198,9 @@ void Manager::smoothMovement(float dt) {
 void Manager::handleTimeInput() {
     if (IsKeyPressed(KEY_SPACE)) simulation.TogglePause();
 
-    if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD) || IsKeyPressed(KEY_RIGHT))
+    if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD))
         simulation.SetTimeScale(simulation.TimeScale() * 2.0f);
-    if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT) || IsKeyPressed(KEY_LEFT))
+    if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT))
         simulation.SetTimeScale(simulation.TimeScale() * 0.5f);
     if (IsKeyPressed(KEY_R)) {
         simulation.Reset();
@@ -172,9 +229,27 @@ void Manager::updateEnergyDisplay(float dt) {
 }
 
 void Manager::handleFieldResize(float dt) {
-    const bool grow   = IsKeyDown(KEY_LEFT_SHIFT)   || IsKeyDown(KEY_RIGHT_SHIFT);
-    const bool shrink = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    // X (ширина):  стрелки вправо / влево
+    // Y (глубина): Shift / Ctrl
+    // Z (высота):  стрелки вверх / вниз
+    const bool grow[3] = {
+        IsKeyDown(KEY_RIGHT),
+        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
+        IsKeyDown(KEY_UP),
+    };
+    const bool shrink[3] = {
+        IsKeyDown(KEY_LEFT),
+        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
+        IsKeyDown(KEY_DOWN),
+    };
 
-    if (growRepeater.Update(dt, grow))     simulation.NudgeField(+kFieldStep);
-    if (shrinkRepeater.Update(dt, shrink)) simulation.NudgeField(-kFieldStep);
+    for (int a = 0; a < 3; a++) {
+        const Field::Axis axis = static_cast<Field::Axis>(a);
+        if (growRepeaters[a].Update(dt, grow[a]))     simulation.NudgeField(axis, +kFieldStep);
+        if (shrinkRepeaters[a].Update(dt, shrink[a])) simulation.NudgeField(axis, -kFieldStep);
+    }
+}
+
+float Manager::placeY() const {
+    return placeDepth * simulation.Depth();
 }

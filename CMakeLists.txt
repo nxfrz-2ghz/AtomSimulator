@@ -5,8 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Без Release симуляция работает в разы медленнее (нет оптимизаций).
-# Для IDE с несколькими конфигурациями (Visual Studio, Xcode) это не нужно.
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
@@ -26,12 +24,21 @@ FetchContent_MakeAvailable(raylib)
 
 find_package(OpenMP)
 
-# ---------------- Программа ----------------
+# ---------------- Program ----------------
 add_executable(AtomSimulator
     main.cpp
     src/manager/manager.cpp
     src/render/render.cpp
+    src/screen/screen_manager.cpp
+    src/screen/screens/controls_screen.cpp
+    src/screen/screens/energy_graph_screen.cpp
+    src/simulation/cell_grid.cpp
+    src/simulation/field.cpp
+    src/simulation/force_calculator.cpp
+    src/simulation/grabber.cpp
+    src/simulation/integrator.cpp
     src/simulation/simulation.cpp
+    src/simulation/time_controller.cpp
 )
 
 target_link_libraries(AtomSimulator PRIVATE raylib)
