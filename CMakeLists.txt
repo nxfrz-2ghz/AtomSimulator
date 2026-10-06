@@ -25,6 +25,7 @@ FetchContent_MakeAvailable(raylib)
 find_package(OpenMP)
 
 # ---------------- Program ----------------
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
 add_executable(AtomSimulator
     main.cpp
     src/manager/manager.cpp
@@ -47,6 +48,8 @@ add_executable(AtomSimulator
 
 target_link_libraries(AtomSimulator PRIVATE raylib)
 
+
+# OpenMP - multithreading
 if(OpenMP_CXX_FOUND)
     target_link_libraries(AtomSimulator PRIVATE OpenMP::OpenMP_CXX)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -56,6 +59,27 @@ if(OpenMP_CXX_FOUND)
 else()
     message(STATUS "OpenMP: not found, building single-threaded")
 endif()
+
+if(WIN32)
+    get_filename_component(MINGW_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+
+    set(REQUIRED_DLLS
+            "${MINGW_BIN_DIR}/libwinpthread-1.dll"
+            "${MINGW_BIN_DIR}/libgomp-1.dll"
+            "${MINGW_BIN_DIR}/libgcc_s_seh-1.dll" # на всякий случай для обработки исключений
+    )
+
+    foreach(dll ${REQUIRED_DLLS})
+        if(EXISTS ${dll})
+            add_custom_command(TARGET AtomSimulator POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${dll}"
+                    "$<TARGET_FILE_DIR:AtomSimulator>"
+            )
+        endif()
+    endforeach()
+endif()
+
 
 if(MSVC)
     target_compile_options(AtomSimulator PRIVATE /W3)

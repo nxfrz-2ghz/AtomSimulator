@@ -27,9 +27,7 @@ private:
     double shownKE = 0.0, shownPE = 0.0;
     size_t shownCount = 0;
 
-    void handleTimeInput();
-    void handleFieldResize(float dt);
-    void handleThermostat(float dt);
+    void handleInput(float dt);
     void updateEnergyDisplay(float dt);
 
     enum class ThermoAction { None, Cooling, Heating };
@@ -37,6 +35,11 @@ private:
     ThermoAction thermoAction = ThermoAction::None;
 
     static constexpr float kFieldStep = 1.0f;
+    static constexpr float kGravityStep = 0.5f;
+    static constexpr HoldRepeater::Config kGravityConfig{ 0.25f, 0.15f, 0.05f, 1.0f };
+    HoldRepeater gravityIncreaseRepeater{kGravityConfig};
+    HoldRepeater gravityDecreaseRepeater{kGravityConfig};
+
     static constexpr HoldRepeater::Config kResizeConfig{ 0.2f, 0.2f, 0.001f, 6.0f };
     HoldRepeater growRepeaters[3]   = {HoldRepeater{kResizeConfig}, HoldRepeater{kResizeConfig}, HoldRepeater{kResizeConfig}};
     HoldRepeater shrinkRepeaters[3] = {HoldRepeater{kResizeConfig}, HoldRepeater{kResizeConfig}, HoldRepeater{kResizeConfig}};

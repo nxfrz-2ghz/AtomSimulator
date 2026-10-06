@@ -20,9 +20,7 @@ void Manager::Update(float dt) {
     if (!viewer2Dor3D) viewer2D.Update(dt);
     else viewer3D.Update(dt);
 
-    handleTimeInput();
-    handleFieldResize(dt);
-    handleThermostat(dt);
+    handleInput(dt);
 
     screens.HandleInput();
     simulation.Update(dt);
@@ -98,6 +96,10 @@ void Manager::DrawUI() {
         50, posY, 20, RAYWHITE);
     posY += stepY;
 
+    // Gravity
+    DrawText(TextFormat("Gravity (Z-AXIS): %.1f", simulation.GetGravity()), 50, posY, 20, RAYWHITE);
+    posY += stepY;
+
     if (!viewer2Dor3D) {
         DrawText(TextFormat("Place depth: %.0f%%", viewer2D.placeDepth * 100.0f), 50, posY, 20, RAYWHITE);
     }
@@ -105,23 +107,33 @@ void Manager::DrawUI() {
     screens.Draw(ScreenContext{simulation});
 }
 
-void Manager::handleThermostat(float dt) {
+void Manager::handleInput(float dt) {
+
+    // Gravity
+    const bool increaseGravity = IsKeyDown(KEY_PERIOD);
+    const bool decreaseGravity = IsKeyDown(KEY_COMMA);
+
+    if (gravityIncreaseRepeater.Update(dt, increaseGravity))
+        simulation.SetGravity(simulation.GetGravity() + kGravityStep);
+    if (gravityDecreaseRepeater.Update(dt, decreaseGravity))
+        simulation.SetGravity(simulation.GetGravity() - kGravityStep);
+
+    // Temperature
     const bool cool = IsKeyDown(KEY_Q);
     const bool heat = IsKeyDown(KEY_E);
 
-    // Обе клавиши сразу - действия гасят друг друга
     if (cool == heat || simulation.Atoms().empty()) {
         thermoAction = ThermoAction::None;
-        return;
+    }
+    else {
+        thermoAction = cool ? ThermoAction::Cooling : ThermoAction::Heating;
+        const float sign = cool ? -1.0f : 1.0f;
+        simulation.ScaleKineticEnergy(std::exp(sign * kThermostatRate * dt));
     }
 
-    // Непрерывно, по реальному времени кадра: KE *= exp(+-rate * dt)
-    thermoAction = cool ? ThermoAction::Cooling : ThermoAction::Heating;
-    const float sign = cool ? -1.0f : 1.0f;
-    simulation.ScaleKineticEnergy(std::exp(sign * kThermostatRate * dt));
-}
 
-void Manager::handleTimeInput() {
+
+    // Time
     if (IsKeyPressed(KEY_SPACE)) simulation.TogglePause();
 
     if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD))
@@ -134,27 +146,10 @@ void Manager::handleTimeInput() {
     }
 
     if (simulation.IsPaused() &&
-        (IsKeyPressed(KEY_PERIOD) || IsKeyPressedRepeat(KEY_PERIOD)))
+        (IsKeyPressed(KEY_RIGHT_ALT) || IsKeyPressedRepeat(KEY_RIGHT_ALT)))
         simulation.StepOnce();
-}
 
-void Manager::updateEnergyDisplay(float dt) {
-    const size_t n = simulation.Atoms().size();
-    if (n == 0) { shownKE = shownPE = 0.0; shownCount = 0; return; }
-
-    const double ke = simulation.KineticEnergy()   / double(n);
-    const double pe = simulation.PotentialEnergy() / double(n);
-
-    if (n != shownCount) {
-        shownKE = ke; shownPE = pe; shownCount = n;
-    } else {
-        const double a = 1.0 - std::exp(-double(dt) / 0.5);
-        shownKE += (ke - shownKE) * a;
-        shownPE += (pe - shownPE) * a;
-    }
-}
-
-void Manager::handleFieldResize(float dt) {
+    // FIELD RESIZE
     // X (ширина):  стрелки вправо / влево
     // Y (глубина): Shift / Ctrl
     // Z (высота):  стрелки вверх / вниз
@@ -173,5 +168,21 @@ void Manager::handleFieldResize(float dt) {
         const Field::Axis axis = static_cast<Field::Axis>(a);
         if (growRepeaters[a].Update(dt, grow[a]))     simulation.NudgeField(axis, +kFieldStep);
         if (shrinkRepeaters[a].Update(dt, shrink[a])) simulation.NudgeField(axis, -kFieldStep);
+    }
+}
+
+void Manager::updateEnergyDisplay(float dt) {
+    const size_t n = simulation.Atoms().size();
+    if (n == 0) { shownKE = shownPE = 0.0; shownCount = 0; return; }
+
+    const double ke = simulation.KineticEnergy()   / double(n);
+    const double pe = simulation.PotentialEnergy() / double(n);
+
+    if (n != shownCount) {
+        shownKE = ke; shownPE = pe; shownCount = n;
+    } else {
+        const double a = 1.0 - std::exp(-double(dt) / 0.5);
+        shownKE += (ke - shownKE) * a;
+        shownPE += (pe - shownPE) * a;
     }
 }

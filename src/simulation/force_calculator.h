@@ -7,5 +7,7 @@
 
 class ForceCalculator {
 public:
+    inline static float gravity = 0.0f;
+
     static double Compute(std::vector<Atom>& atoms, const CellGrid& grid, const Field& field);
 };

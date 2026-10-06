@@ -5,7 +5,7 @@
 #include <raymath.h>
 
 #include "../utils/projection.h"
-#include "force_calculator.h"
+#include "integrator.h"
 
 namespace {
     constexpr float kPlaceMinRatio = 1.0f;

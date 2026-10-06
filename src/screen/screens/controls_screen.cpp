@@ -8,7 +8,7 @@ namespace {
         {"Z",                   "show / hide energy graph"},
         {"Space",               "pause"},
         {"+ / -",               "simulation speed x2 / x0.5"},
-        {".",                   "single step (when paused)"},
+        {"Right ALT",           "single step (when paused)"},
         {"R",                   "reset all"},
         {"1 ... 0",             "select atom type"},
         {"LMB",                 "place atom"},
@@ -20,8 +20,9 @@ namespace {
         {"Wheel",               "zoom"},
         {"W A S D",             "move camera"},
         {"-> / <-  (hold)",     "expand / compress field along X"},
-        {"Shift / Ctrl (hold)", "expand / compress field along Y (depth)"},
         {"Up / Down (hold)",    "expand / compress field along Z"},
+        {"Shift / Ctrl (hold)", "expand / compress field along Y (depth)"},
+        {"'<' / '>' (hold)",    "gravity +/- 0.5 per step"},
         {"G",                   "toggle grid"},
     };
 

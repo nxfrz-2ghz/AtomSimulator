@@ -90,7 +90,7 @@ double ForceCalculator::Compute(std::vector<Atom>& atoms, const CellGrid& grid, 
     const Vector3 size = field.Size();
     double pe = 0.0;
 
-    // Идём по атомам, а не по ячейкам: сетка трёхмерная и может быть огромной и почти пустой
+    // for every atom
     #pragma omp parallel for schedule(dynamic, 64) reduction(+:pe)
     for (int idA = 0; idA < n; idA++) {
         const Atom& atomA = atoms[idA];
@@ -98,8 +98,13 @@ double ForceCalculator::Compute(std::vector<Atom>& atoms, const CellGrid& grid, 
         const AtomData& dA = atomTypes[atomA.type];
         const CellGrid::Coord cell = grid.CoordsOf(posA);
 
-        Vector3 force = {0.0f, 0.0f, 0.0f};
-        double peA = 0.0;
+        // gravity is an acceleration, so the gravitational force is m * g.
+        // Z is the vertical axis; positive gravity points toward +Z.
+        const float mass = dA.mass;
+        Vector3 force = {0.0f, 0.0f, mass * gravity};
+
+        // U = -m * g * z
+        double peA = -double(mass) * double(gravity) * double(posA.z);
 
         // interaction with atoms in its and neighbor cells
         grid.ForEachNeighbor(cell, [&](unsigned int idB) {

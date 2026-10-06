@@ -3,9 +3,9 @@
 #include <vector>
 #include <raylib.h>
 #include "../atom/atom.h"
-#include "integrator.h"
 #include "cell_grid.h"
 #include "field.h"
+#include "force_calculator.h"
 #include "grabber.h"
 #include "time_controller.h"
 
@@ -49,12 +49,16 @@ public:
     double TotalEnergy()     const { return kinetic + potential; }
     void ScaleKineticEnergy(float energyFactor);
 
+    // Forces
+    float GetGravity() const { return ForceCalculator::gravity; }
+    void SetGravity(float g) { ForceCalculator::gravity = g; }
+
     // Atoms
     bool AddAtom(Vector3 pos, unsigned int type);
     bool RemoveAtom(Vector2 plane);
     const std::vector<Atom>& Atoms() const { return atoms; }
 
-    // Grab (перетаскивание в плоскости экрана, глубина атома сохраняется)
+    // Grab
     bool BeginGrab(Vector2 plane, float pickRadius);
     void DragTo(Vector2 plane, float realDt);
     void EndGrab()                 { grabber.End(); }
